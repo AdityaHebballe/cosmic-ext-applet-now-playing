@@ -16,6 +16,13 @@ pub struct NowPlayingData {
     pub has_active_media: bool,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlayerInfo {
+    pub identity: String,
+    pub track: String,
+    pub state: PlaybackState,
+}
+
 pub fn now_playing_snapshot() -> NowPlayingData {
     let finder = PlayerFinder::new();
 

@@ -75,12 +75,17 @@ mod tests {
     }
 }
 
-pub fn with_active_player<F>(f: F)
+pub fn with_player<F>(identity: &str, f: F)
 where
     F: FnOnce(&mpris::Player),
 {
     if let Ok(finder) = PlayerFinder::new() {
-        if let Ok(player) = finder.find_active() {
+        let player = if identity.is_empty() {
+            finder.find_active()
+        } else {
+            finder.find_by_name(identity)
+        };
+        if let Ok(player) = player {
             f(&player);
         }
     }
