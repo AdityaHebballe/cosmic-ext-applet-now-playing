@@ -15,7 +15,7 @@ use cosmic::iced::{
     Limits,
     Subscription,
 };
-use cosmic::widget::{button, button::Catalog, icon, text, Column, Row};
+use cosmic::widget::{button, button::Catalog, icon, mouse_area, text, Column, Row};
 use cosmic::{Action, Element, Task};
 use mpris::{Event as MprisEvent, PlayerFinder};
 
@@ -315,7 +315,10 @@ impl cosmic::Application for Window {
             .spacing(pad.0)
             .padding([0, pad.0])
             .align_y(cosmic::iced::alignment::Vertical::Center)
-            .push(icon::from_name(transport_icon).size(size.0))
+            .push(
+                mouse_area(icon::from_name(transport_icon).size(size.0))
+                    .on_press(Message::TogglePlayPause),
+            )
             .push(
                 text(self.now_playing_text.as_str())
                     .size(size.0.saturating_sub(1))
