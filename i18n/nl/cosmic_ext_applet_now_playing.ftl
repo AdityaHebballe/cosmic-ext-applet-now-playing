@@ -5,3 +5,7 @@ unknown-artist = Onbekend
 previous-track = Vorig nummer
 toggle-play-pause = Afspelen of pauzeren
 next-track = Volgend nummer
+use-album-colors = Albumkleuren gebruiken
+settings = Instellingen
+back = Terug
+select-player = Speler selecteren

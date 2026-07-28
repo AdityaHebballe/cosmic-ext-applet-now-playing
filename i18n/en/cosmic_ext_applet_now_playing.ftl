@@ -5,3 +5,7 @@ unknown-artist = Unknown
 previous-track = Previous track
 toggle-play-pause = Play or pause
 next-track = Next track
+use-album-colors = Use album colors
+settings = Settings
+back = Back
+select-player = Select player

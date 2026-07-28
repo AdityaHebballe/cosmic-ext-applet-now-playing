@@ -2,6 +2,7 @@ use std::path::Path;
 
 use cosmic::iced::Color;
 
+#[allow(clippy::float_cmp)]
 fn rgb_to_hsl(r: u8, g: u8, b: u8) -> (f32, f32, f32) {
     let r = f32::from(r) / 255.0;
     let g = f32::from(g) / 255.0;
@@ -81,16 +82,19 @@ fn hsl_to_rgb(hue: f32, saturation: f32, lightness: f32) -> Color {
 }
 
 fn normalize_album_color(color: Color) -> Color {
-    let r = (color.r.clamp(0.0, 1.0) * 255.0).round() as u8;
-    let g = (color.g.clamp(0.0, 1.0) * 255.0).round() as u8;
-    let b = (color.b.clamp(0.0, 1.0) * 255.0).round() as u8;
+    let r = channel_to_u8(color.r);
+    let g = channel_to_u8(color.g);
+    let b = channel_to_u8(color.b);
     let (hue, saturation, lightness) = rgb_to_hsl(r, g, b);
 
-    hsl_to_rgb(hue, saturation.clamp(0.40, 0.72), lightness.clamp(0.38, 0.62))
+    hsl_to_rgb(
+        hue,
+        saturation.clamp(0.40, 0.72),
+        lightness.clamp(0.38, 0.62),
+    )
 }
 
-pub fn dominant_album_color(path: Option<&Path>) -> Option<Color> {
-    let path = path?;
+pub fn dominant_album_color(path: &Path) -> Option<Color> {
     let image = image::open(path).ok()?.to_rgba8();
     let thumb = image::imageops::thumbnail(&image, 32, 32);
 
@@ -111,7 +115,11 @@ pub fn dominant_album_color(path: Option<&Path>) -> Option<Color> {
         }
 
         let lightness_bias = (1.0 - (lightness - 0.5).abs() * 2.0).max(0.0);
-        let hue_bias = if (35.0..=70.0).contains(&hue) { 0.92 } else { 1.0 };
+        let hue_bias = if (35.0..=70.0).contains(&hue) {
+            0.92
+        } else {
+            1.0
+        };
         let weight = saturation * lightness_bias * hue_bias;
         if weight <= 0.0 {
             continue;
@@ -127,8 +135,65 @@ pub fn dominant_album_color(path: Option<&Path>) -> Option<Color> {
         return Some(Color::WHITE);
     }
 
-    let r = (sum_r / total_weight).round() as u8;
-    let g = (sum_g / total_weight).round() as u8;
-    let b = (sum_b / total_weight).round() as u8;
+    let r = byte_value_to_u8(sum_r / total_weight);
+    let g = byte_value_to_u8(sum_g / total_weight);
+    let b = byte_value_to_u8(sum_b / total_weight);
     Some(normalize_album_color(Color::from_rgb8(r, g, b)))
+}
+
+fn channel_to_u8(value: f32) -> u8 {
+    byte_value_to_u8(value.clamp(0.0, 1.0) * 255.0)
+}
+
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn byte_value_to_u8(value: f32) -> u8 {
+    value.clamp(0.0, 255.0).round() as u8
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use image::{Rgba, RgbaImage};
+    use tempfile::tempdir;
+
+    fn color_from_image(pixel: Rgba<u8>) -> Color {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("cover.png");
+        RgbaImage::from_pixel(4, 4, pixel).save(&path).unwrap();
+        dominant_album_color(&path).unwrap()
+    }
+
+    #[test]
+    fn transparent_and_neutral_images_fall_back_to_white() {
+        assert_eq!(color_from_image(Rgba([200, 20, 20, 0])), Color::WHITE);
+        assert_eq!(color_from_image(Rgba([128, 128, 128, 255])), Color::WHITE);
+    }
+
+    #[test]
+    fn saturated_color_is_preserved_and_normalized() {
+        let color = color_from_image(Rgba([220, 30, 30, 255]));
+
+        assert!(color.r > color.g);
+        assert!(color.r > color.b);
+        let (_, saturation, lightness) = rgb_to_hsl(
+            channel_to_u8(color.r),
+            channel_to_u8(color.g),
+            channel_to_u8(color.b),
+        );
+        assert!((0.40..=0.73).contains(&saturation));
+        assert!((0.38..=0.63).contains(&lightness));
+    }
+
+    #[test]
+    fn dark_and_light_colors_are_bounded_for_readability() {
+        for pixel in [Rgba([80, 0, 0, 255]), Rgba([255, 150, 150, 255])] {
+            let color = color_from_image(pixel);
+            let (_, _, lightness) = rgb_to_hsl(
+                channel_to_u8(color.r),
+                channel_to_u8(color.g),
+                channel_to_u8(color.b),
+            );
+            assert!((0.37..=0.63).contains(&lightness));
+        }
+    }
 }

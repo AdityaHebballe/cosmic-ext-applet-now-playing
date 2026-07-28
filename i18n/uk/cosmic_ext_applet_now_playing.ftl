@@ -5,3 +5,7 @@ unknown-artist = Невідомо
 previous-track = Назад
 toggle-play-pause = Відтв. або Пауза
 next-track = Далі
+use-album-colors = Використовувати кольори альбому
+settings = Налаштування
+back = Назад
+select-player = Вибрати програвач

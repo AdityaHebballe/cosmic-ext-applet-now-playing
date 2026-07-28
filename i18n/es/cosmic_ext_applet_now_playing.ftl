@@ -1,0 +1,11 @@
+now-playing = Reproduciendo ahora
+nothing-playing = No se está reproduciendo nada
+unknown-title = Desconocido
+unknown-artist = Desconocido
+previous-track = Pista anterior
+toggle-play-pause = Reproducir o pausar
+next-track = Pista siguiente
+use-album-colors = Usar colores del álbum
+settings = Ajustes
+back = Atrás
+select-player = Seleccionar reproductor

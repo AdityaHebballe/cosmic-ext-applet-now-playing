@@ -45,6 +45,10 @@ just clean && just build-release && sudo just install
 
 Then add the applet from COSMIC panel settings.
 
+## Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md) for release notes.
+
 ## Feedback
 
 Feedback is very welcome.

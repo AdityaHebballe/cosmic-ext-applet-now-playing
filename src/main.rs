@@ -1,7 +1,10 @@
 mod album_color;
 mod i18n;
-mod metadata;
-mod player;
+mod media;
+mod model;
+mod settings;
+mod style;
+mod ui;
 mod window;
 
 use crate::window::Window;

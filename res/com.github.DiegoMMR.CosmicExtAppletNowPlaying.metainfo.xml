@@ -13,6 +13,35 @@
   <description>
     <p>A COSMIC panel applet that displays current track title and artist from active MPRIS players, with a popup for album art and media controls.</p>
   </description>
+  <screenshots>
+    <screenshot type="default">
+      <image type="source">https://raw.githubusercontent.com/cosmic-utils/cosmic-ext-applet-now-playing/main/res/screenshot-2.png</image>
+      <caption>Album artwork, track information, and playback controls</caption>
+    </screenshot>
+    <screenshot>
+      <image type="source">https://raw.githubusercontent.com/cosmic-utils/cosmic-ext-applet-now-playing/main/res/screenshot-1.png</image>
+      <caption>Current track information in the COSMIC panel</caption>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="0.2.0" date="2026-07-28">
+      <description>
+        <ul>
+          <li>Added selection between multiple active media players</li>
+          <li>Added play and pause control from the media icon in the panel</li>
+          <li>Added a setting to enable or disable album-inspired panel colors</li>
+          <li>Added native frosted-glass blur for the applet popup</li>
+          <li>Improved media metadata, album artwork, and player-state handling</li>
+          <li>Added Spanish localization and updated existing translations</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.1.0" date="2026-07-15">
+      <description>
+        <p>Initial release.</p>
+      </description>
+    </release>
+  </releases>
   <launchable type="desktop-id">com.github.DiegoMMR.CosmicExtAppletNowPlaying.desktop</launchable>
   <icon type="stock">com.github.DiegoMMR.CosmicExtAppletNowPlaying</icon>
   <categories>
