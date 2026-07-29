@@ -947,7 +947,6 @@ version = "0.1.0"
 dependencies = [
  "i18n-embed 0.15.4",
  "i18n-embed-fl 0.9.4",
- "image",
  "libcosmic",
  "mpris",
  "rust-embed",
@@ -2537,7 +2536,6 @@ checksum = "85ab80394333c02fe689eaf900ab500fbd0c2213da414687ebf995a65d5a6104"
 dependencies = [
  "bytemuck",
  "byteorder-lite",
- "image-webp",
  "moxcms",
  "num-traits",
  "png 0.18.1",
