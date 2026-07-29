@@ -5,7 +5,7 @@ A small COSMIC panel applet that shows what is currently playing via MPRIS.
 It displays:
 - Current track title and artist in the panel
 - A popup with album art and media controls
-- Album-color inspired panel button styling
+- A compact MediaShell-inspired popup with square cover art and clear transport controls
 
 ![screenshot of the applet](./res/screenshot-1.png)
 ![screenshot of the applet 2](./res/screenshot-2.png)
