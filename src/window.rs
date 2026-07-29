@@ -94,7 +94,7 @@ impl cosmic::Application for Window {
     }
 
     fn init(core: Core, _flags: Self::Flags) -> (Self, Task<Action<Self::Message>>) {
-        let initial = now_playing_snapshot();
+        let initial = now_playing_snapshot(false);
 
         let mut window = Window {
             core,
@@ -189,7 +189,8 @@ impl cosmic::Application for Window {
                 // Selection is applied immediately; the periodic MPRIS refresh
                 // will reconcile metadata and capabilities on the next tick.
                 let _ = with_player(&bus_name, |player| {
-                    let data = now_playing_from_player_with_sources(player, self.sources.clone());
+                    let data =
+                        now_playing_from_player_with_sources(player, self.sources.clone(), true);
                     self.apply_now_playing(data);
                 });
             }

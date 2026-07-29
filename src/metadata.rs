@@ -57,14 +57,14 @@ impl NowPlayingData {
     }
 }
 
-pub fn now_playing_snapshot() -> NowPlayingData {
+pub fn now_playing_snapshot(include_position: bool) -> NowPlayingData {
     let finder = PlayerFinder::new();
 
     if let Ok(finder) = finder {
         if let Ok(players) = finder.find_all() {
             let sources = player_sources_from_players(&players);
             if let Some(player) = find_selected_or_active_from_players(players) {
-                return now_playing_from_player_with_sources(&player, sources);
+                return now_playing_from_player_with_sources(&player, sources, include_position);
             }
         }
     }
@@ -96,6 +96,7 @@ pub fn now_playing_snapshot() -> NowPlayingData {
 pub fn now_playing_from_player_with_sources(
     player: &mpris::Player,
     sources: Vec<(String, String)>,
+    include_position: bool,
 ) -> NowPlayingData {
     let playback_state = playback_state_from_player(player);
 
@@ -119,10 +120,14 @@ pub fn now_playing_from_player_with_sources(
             player_bus_name: player.bus_name().to_owned(),
             sources,
             duration_seconds: meta.length().map(|duration| duration.as_secs()),
-            position_seconds: player
-                .get_position()
-                .ok()
-                .map(|duration| duration.as_secs()),
+            position_seconds: include_position
+                .then(|| {
+                    player
+                        .get_position()
+                        .ok()
+                        .map(|duration| duration.as_secs())
+                })
+                .flatten(),
             capabilities: PlaybackCapabilities {
                 seek: player.can_seek().unwrap_or(false),
                 previous: player.can_go_previous().unwrap_or(false),

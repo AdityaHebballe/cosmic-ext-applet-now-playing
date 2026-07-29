@@ -4,6 +4,7 @@
 //! old subscriptions from racing to overwrite each other's snapshots.
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Condvar, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 
@@ -14,12 +15,18 @@ use crate::metadata::{now_playing_snapshot, NowPlayingData};
 use crate::window::PlaybackState;
 
 static POPUP_OPEN: AtomicBool = AtomicBool::new(false);
+static POLL_WAKE: OnceLock<(Mutex<bool>, Condvar)> = OnceLock::new();
 
 const ACTIVE_INTERVAL: Duration = Duration::from_secs(1);
-const IDLE_INTERVAL: Duration = Duration::from_secs(3);
+const BACKGROUND_INTERVAL: Duration = Duration::from_secs(3);
 
 pub fn set_popup_open(open: bool) {
     POPUP_OPEN.store(open, Ordering::Relaxed);
+    let (pending, wake) = POLL_WAKE.get_or_init(|| (Mutex::new(false), Condvar::new()));
+    if let Ok(mut pending) = pending.lock() {
+        *pending = true;
+        wake.notify_one();
+    }
 }
 
 pub fn subscription() -> Subscription<NowPlayingData> {
@@ -38,10 +45,9 @@ fn monitor_loop(output: &mut mpsc::Sender<NowPlayingData>) {
             break;
         }
 
-        let snapshot = now_playing_snapshot();
         let popup_open = POPUP_OPEN.load(Ordering::Relaxed);
+        let snapshot = now_playing_snapshot(popup_open);
         let position_is_visible = popup_open && snapshot.state == PlaybackState::Playing;
-        let active = snapshot.state == PlaybackState::Playing;
         let changed = match last_sent.as_ref() {
             None => true,
             Some(previous) if position_is_visible => previous != &snapshot,
@@ -58,11 +64,25 @@ fn monitor_loop(output: &mut mpsc::Sender<NowPlayingData>) {
             }
         }
 
-        thread::sleep(if popup_open || active {
+        wait_for_refresh(if popup_open {
             ACTIVE_INTERVAL
         } else {
-            IDLE_INTERVAL
+            BACKGROUND_INTERVAL
         });
+    }
+}
+
+fn wait_for_refresh(interval: Duration) {
+    let (pending, wake) = POLL_WAKE.get_or_init(|| (Mutex::new(false), Condvar::new()));
+    if let Ok(mut pending) = pending.lock() {
+        if std::mem::take(&mut *pending) {
+            return;
+        }
+        if let Ok((mut pending, _)) = wake.wait_timeout(pending, interval) {
+            _ = std::mem::take(&mut *pending);
+        }
+    } else {
+        thread::sleep(interval);
     }
 }
 

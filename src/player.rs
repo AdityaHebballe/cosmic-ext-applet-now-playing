@@ -1,9 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::io;
+use std::io::{self, Read};
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use mpris::{LoopStatus, PlaybackStatus, PlayerFinder};
 use url::Url;
@@ -13,6 +13,13 @@ use crate::window::PlaybackState;
 static SELECTED_PLAYER: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 static ART_DOWNLOADS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 static ART_FAILURES: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
+static LAST_CACHE_PRUNE: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
+
+const MAX_ART_DOWNLOADS: usize = 2;
+const MAX_ART_BYTES: u64 = 10 * 1024 * 1024;
+const MAX_ART_CACHE_BYTES: u64 = 100 * 1024 * 1024;
+const MAX_ART_CACHE_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+const CACHE_PRUNE_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 
 fn selected_player_slot() -> &'static Mutex<Option<String>> {
     SELECTED_PLAYER.get_or_init(|| Mutex::new(None))
@@ -86,7 +93,7 @@ pub fn album_art_path_from_metadata(meta: &mpris::Metadata) -> Option<PathBuf> {
 /// remote HTTP(S) URL for cover art. Browsers and Spotify commonly use the
 /// latter, so cache it locally before handing it to COSMIC's image widget.
 fn download_remote_album_art(url: &str) -> Option<PathBuf> {
-    if !(url.starts_with("https://") || url.starts_with("http://")) {
+    if !is_downloadable_art_url(url) {
         return None;
     }
 
@@ -95,6 +102,7 @@ fn download_remote_album_art(url: &str) -> Option<PathBuf> {
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))?
         .join("cosmic-ext-applet-now-playing");
     fs::create_dir_all(&cache_dir).ok()?;
+    prune_album_art_cache(&cache_dir);
 
     let path = cache_dir.join(format!("{}.{}", stable_url_hash(url), image_extension(url)));
     if path.is_file() {
@@ -112,10 +120,9 @@ fn download_remote_album_art(url: &str) -> Option<PathBuf> {
     }
 
     let downloads = ART_DOWNLOADS.get_or_init(|| Mutex::new(HashSet::new()));
-    let should_start = downloads
-        .lock()
-        .ok()
-        .is_some_and(|mut downloads| downloads.insert(url.to_owned()));
+    let should_start = downloads.lock().ok().is_some_and(|mut downloads| {
+        downloads.len() < MAX_ART_DOWNLOADS && downloads.insert(url.to_owned())
+    });
     if !should_start {
         return None;
     }
@@ -128,10 +135,19 @@ fn download_remote_album_art(url: &str) -> Option<PathBuf> {
                 .timeout(Duration::from_secs(8))
                 .call()
                 .map_err(|error| io::Error::other(error.to_string()))?;
+            if response
+                .header("Content-Length")
+                .and_then(|length| length.parse::<u64>().ok())
+                .is_some_and(|length| length > MAX_ART_BYTES)
+            {
+                return Err(io::Error::other("album art exceeds the download limit"));
+            }
             let mut reader = response.into_reader();
             let mut file = fs::File::create(&temporary)?;
-            io::copy(&mut reader, &mut file)?;
-            file.sync_all()?;
+            let copied = io::copy(&mut reader.by_ref().take(MAX_ART_BYTES + 1), &mut file)?;
+            if copied > MAX_ART_BYTES {
+                return Err(io::Error::other("album art exceeds the download limit"));
+            }
             fs::rename(&temporary, &path)
         })();
         if result.is_err() {
@@ -151,6 +167,67 @@ fn download_remote_album_art(url: &str) -> Option<PathBuf> {
         }
     });
     None
+}
+
+fn is_downloadable_art_url(url: &str) -> bool {
+    url.starts_with("https://")
+}
+
+fn prune_album_art_cache(cache_dir: &PathBuf) {
+    let now = Instant::now();
+    let should_prune = LAST_CACHE_PRUNE
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .ok()
+        .is_some_and(|mut last_prune| {
+            if last_prune.is_some_and(|last| last.elapsed() < CACHE_PRUNE_INTERVAL) {
+                false
+            } else {
+                *last_prune = Some(now);
+                true
+            }
+        });
+    if !should_prune {
+        return;
+    }
+
+    let Ok(entries) = fs::read_dir(cache_dir) else {
+        return;
+    };
+    let mut files = Vec::new();
+    let mut total_size = 0_u64;
+    for entry in entries.flatten() {
+        let Ok(metadata) = entry.metadata() else {
+            continue;
+        };
+        if !metadata.is_file() {
+            continue;
+        }
+        if entry
+            .path()
+            .extension()
+            .is_some_and(|extension| extension == "part")
+        {
+            continue;
+        }
+        let modified = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+        if modified.elapsed().unwrap_or_default() > MAX_ART_CACHE_AGE {
+            let _ = fs::remove_file(entry.path());
+            continue;
+        }
+        total_size = total_size.saturating_add(metadata.len());
+        files.push((modified, metadata.len(), entry.path()));
+    }
+
+    files.sort_by_key(|(modified, _, _)| *modified);
+    for (_, size, path) in files {
+        if total_size <= MAX_ART_CACHE_BYTES {
+            break;
+        }
+        if fs::remove_file(path).is_ok() {
+            total_size = total_size.saturating_sub(size);
+        }
+    }
 }
 
 fn stable_url_hash(url: &str) -> u64 {
@@ -257,7 +334,7 @@ pub fn cycle_loop_status(player: &mpris::Player) -> Option<LoopStatus> {
 
 #[cfg(test)]
 mod tests {
-    use super::{file_url_to_path, image_extension};
+    use super::{file_url_to_path, image_extension, is_downloadable_art_url};
     use std::path::PathBuf;
 
     #[test]
@@ -285,5 +362,12 @@ mod tests {
             "webp"
         );
         assert_eq!(image_extension("https://example.com/cover"), "jpg");
+    }
+
+    #[test]
+    fn downloads_only_secure_remote_artwork() {
+        assert!(is_downloadable_art_url("https://example.com/cover.jpg"));
+        assert!(!is_downloadable_art_url("http://example.com/cover.jpg"));
+        assert!(!is_downloadable_art_url("file:///tmp/cover.jpg"));
     }
 }
