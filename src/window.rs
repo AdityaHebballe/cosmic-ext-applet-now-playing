@@ -375,11 +375,7 @@ impl cosmic::Application for Window {
                     .align_x(cosmic::iced::alignment::Horizontal::Right),
             );
 
-        let loop_label = match self.loop_status.unwrap_or(LoopStatus::None) {
-            LoopStatus::None => "Off",
-            LoopStatus::Playlist => "All",
-            LoopStatus::Track => "One",
-        };
+        let loop_status = self.loop_status.unwrap_or(LoopStatus::None);
         let shuffle = button::icon(icon::from_name("media-playlist-shuffle-symbolic").size(size.0));
         let shuffle = if self.can_shuffle {
             shuffle.on_press(Message::ToggleShuffle)
@@ -391,23 +387,30 @@ impl cosmic::Application for Window {
         } else {
             shuffle
         };
-        let loop_button =
-            button::icon(icon::from_name("media-playlist-repeat-symbolic").size(size.0));
+        let loop_content: Element<'_, Message> = if loop_status == LoopStatus::Track {
+            Row::new()
+                .spacing(1)
+                .align_y(cosmic::iced::alignment::Vertical::Center)
+                .push(icon::from_name("media-playlist-repeat-symbolic").size(size.0))
+                .push(text("1").size(size.0.saturating_sub(3)))
+                .into()
+        } else {
+            icon::from_name("media-playlist-repeat-symbolic")
+                .size(size.0)
+                .into()
+        };
+        let loop_button = button::custom(loop_content);
         let loop_button = if self.can_loop {
             loop_button.on_press(Message::CycleLoop)
         } else {
             loop_button
         };
-        let loop_button = if self.loop_status.unwrap_or(LoopStatus::None) != LoopStatus::None {
+        let loop_button = if loop_status != LoopStatus::None {
             loop_button.class(cosmic::theme::Button::Suggested)
         } else {
             loop_button
         };
-        let mode_controls = Row::new()
-            .spacing(8)
-            .push(shuffle)
-            .push(loop_button)
-            .push(text(loop_label).size(size.0.saturating_sub(2)));
+        let mode_controls = Row::new().spacing(8).push(shuffle).push(loop_button);
 
         let source_picker =
             self.sources

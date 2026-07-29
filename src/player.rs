@@ -244,7 +244,9 @@ pub fn toggle_shuffle(player: &mpris::Player) -> Option<bool> {
         .checked_set_shuffle(next)
         .ok()
         .filter(|changed| *changed)?;
-    Some(next)
+    // Cider currently advertises a writable property but silently retains its
+    // old value. Confirm the write before reflecting it in the applet.
+    player.get_shuffle().ok().filter(|actual| *actual == next)
 }
 
 pub fn cycle_loop_status(player: &mpris::Player) -> Option<LoopStatus> {
@@ -258,7 +260,10 @@ pub fn cycle_loop_status(player: &mpris::Player) -> Option<LoopStatus> {
         .checked_set_loop_status(next)
         .ok()
         .filter(|changed| *changed)?;
-    Some(next)
+    player
+        .get_loop_status()
+        .ok()
+        .filter(|actual| *actual == next)
 }
 
 #[cfg(test)]
