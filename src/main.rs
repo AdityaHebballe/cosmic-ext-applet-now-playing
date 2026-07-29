@@ -1,9 +1,6 @@
 mod i18n;
-mod media;
-mod model;
-mod settings;
-mod style;
-mod ui;
+mod metadata;
+mod player;
 mod window;
 
 use crate::window::Window;
