@@ -6,6 +6,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use mpris::{LoopStatus, PlaybackStatus, PlayerFinder};
+use url::Url;
 
 use crate::window::PlaybackState;
 
@@ -176,41 +177,29 @@ fn image_extension(url: &str) -> &'static str {
 }
 
 fn file_url_to_path(url: &str) -> Option<PathBuf> {
-    let path = url
-        .strip_prefix("file://localhost")
-        .or_else(|| url.strip_prefix("file://"))?;
-
-    Some(PathBuf::from(percent_decode_path(path)))
+    if !has_valid_percent_encoding(url) {
+        return None;
+    }
+    Url::parse(url).ok()?.to_file_path().ok()
 }
 
-fn percent_decode_path(path: &str) -> String {
-    let bytes = path.as_bytes();
-    let mut decoded = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-
-    while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let (Some(high), Some(low)) = (hex_value(bytes[i + 1]), hex_value(bytes[i + 2])) {
-                decoded.push((high << 4) | low);
-                i += 3;
-                continue;
+fn has_valid_percent_encoding(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            if index + 2 >= bytes.len()
+                || !bytes[index + 1].is_ascii_hexdigit()
+                || !bytes[index + 2].is_ascii_hexdigit()
+            {
+                return false;
             }
+            index += 3;
+        } else {
+            index += 1;
         }
-
-        decoded.push(bytes[i]);
-        i += 1;
     }
-
-    String::from_utf8_lossy(&decoded).into_owned()
-}
-
-fn hex_value(byte: u8) -> Option<u8> {
-    match byte {
-        b'0'..=b'9' => Some(byte - b'0'),
-        b'a'..=b'f' => Some(byte - b'a' + 10),
-        b'A'..=b'F' => Some(byte - b'A' + 10),
-        _ => None,
-    }
+    true
 }
 
 pub fn player_sources_from_players(players: &[mpris::Player]) -> Vec<(String, String)> {
@@ -282,6 +271,11 @@ mod tests {
     #[test]
     fn ignores_non_file_urls() {
         assert_eq!(file_url_to_path("https://example.com/cover.png"), None);
+    }
+
+    #[test]
+    fn rejects_malformed_file_urls() {
+        assert_eq!(file_url_to_path("file:///Music/cover%ZZ.png"), None);
     }
 
     #[test]

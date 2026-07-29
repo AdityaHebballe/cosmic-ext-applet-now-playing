@@ -5,15 +5,16 @@ use cosmic::iced::{
     advanced::text::{Ellipsize, EllipsizeHeightLimit, Wrapping},
     window,
     window::Id,
-    ContentFit, Length, Subscription,
+    Color, ContentFit, Length, Subscription,
 };
-use cosmic::widget::{button, container, icon, image, slider, text, Column, Row};
+use cosmic::widget::{button, button::Catalog, container, icon, image, slider, text, Column, Row};
 use cosmic::{Action, Element, Task};
 use mpris::LoopStatus;
 
 use crate::coordinator;
 use crate::metadata::{now_playing_from_player_with_sources, now_playing_snapshot, NowPlayingData};
 use crate::player::{cycle_loop_status, select_player, toggle_shuffle, with_player};
+use crate::style::album_tinted_button;
 
 const ID: &str = "com.github.DiegoMMR.CosmicExtAppletNowPlaying";
 
@@ -38,6 +39,7 @@ pub struct Window {
     loop_status: Option<LoopStatus>,
     playback_state: PlaybackState,
     album_art_path: Option<PathBuf>,
+    album_color: Option<Color>,
     has_active_media: bool,
 }
 
@@ -225,6 +227,7 @@ impl cosmic::Application for Window {
             .applet
             .icon_button(transport_icon)
             .on_press(Message::TogglePlayPause);
+        let album_color = self.album_color;
         let track_label = button::custom(
             text(self.now_playing_text.as_str())
                 .size(size.0.saturating_sub(1))
@@ -232,7 +235,26 @@ impl cosmic::Application for Window {
                 .wrapping(Wrapping::None)
                 .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1))),
         )
-        .class(cosmic::theme::Button::AppletIcon)
+        .class(cosmic::theme::Button::Custom {
+            active: Box::new(move |focused, theme| {
+                let base = theme.active(focused, false, &cosmic::theme::Button::AppletIcon);
+                album_tinted_button(base, album_color)
+            }),
+            disabled: Box::new(move |theme| {
+                album_tinted_button(
+                    theme.disabled(&cosmic::theme::Button::AppletIcon),
+                    album_color,
+                )
+            }),
+            hovered: Box::new(move |focused, theme| {
+                let base = theme.hovered(focused, false, &cosmic::theme::Button::AppletIcon);
+                album_tinted_button(base, album_color)
+            }),
+            pressed: Box::new(move |focused, theme| {
+                let base = theme.pressed(focused, false, &cosmic::theme::Button::AppletIcon);
+                album_tinted_button(base, album_color)
+            }),
+        })
         .on_press(Message::TogglePopup);
         let row_content = Row::new()
             .spacing(pad.0)
@@ -376,7 +398,16 @@ impl cosmic::Application for Window {
             );
 
         let loop_status = self.loop_status.unwrap_or(LoopStatus::None);
-        let shuffle = button::icon(icon::from_name("media-playlist-shuffle-symbolic").size(size.0));
+        // Keep both mode controls in equal-width slots. Repeat-one adds a
+        // small marker, but must not make the whole row jump sideways.
+        const MODE_BUTTON_WIDTH: f32 = 30.0;
+        let shuffle = button::custom(
+            container(icon::from_name("media-playlist-shuffle-symbolic").size(size.0))
+                .width(Length::Fixed(MODE_BUTTON_WIDTH))
+                .height(Length::Fixed(MODE_BUTTON_WIDTH))
+                .align_x(cosmic::iced::alignment::Horizontal::Center)
+                .align_y(cosmic::iced::alignment::Vertical::Center),
+        );
         let shuffle = if self.can_shuffle {
             shuffle.on_press(Message::ToggleShuffle)
         } else {
@@ -387,18 +418,29 @@ impl cosmic::Application for Window {
         } else {
             shuffle
         };
-        let loop_content: Element<'_, Message> = if loop_status == LoopStatus::Track {
-            Row::new()
-                .spacing(1)
+        let loop_content = cosmic::iced::widget::stack(vec![
+            container(icon::from_name("media-playlist-repeat-symbolic").size(size.0))
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .align_x(cosmic::iced::alignment::Horizontal::Center)
                 .align_y(cosmic::iced::alignment::Vertical::Center)
-                .push(icon::from_name("media-playlist-repeat-symbolic").size(size.0))
-                .push(text("1").size(size.0.saturating_sub(3)))
-                .into()
-        } else {
-            icon::from_name("media-playlist-repeat-symbolic")
-                .size(size.0)
-                .into()
-        };
+                .into(),
+            container(
+                text(if loop_status == LoopStatus::Track {
+                    "1"
+                } else {
+                    ""
+                })
+                .size(size.0.saturating_sub(4)),
+            )
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .align_x(cosmic::iced::alignment::Horizontal::Right)
+            .align_y(cosmic::iced::alignment::Vertical::Bottom)
+            .into(),
+        ])
+        .width(Length::Fixed(MODE_BUTTON_WIDTH))
+        .height(Length::Fixed(MODE_BUTTON_WIDTH));
         let loop_button = button::custom(loop_content);
         let loop_button = if self.can_loop {
             loop_button.on_press(Message::CycleLoop)
@@ -477,7 +519,14 @@ impl Window {
         self.can_loop = data.capabilities.loop_mode;
         self.loop_status = Some(data.loop_status);
         self.playback_state = data.state;
+        let artwork_changed = self.album_art_path != data.album_art_path;
         self.album_art_path = data.album_art_path;
+        if artwork_changed {
+            self.album_color = self
+                .album_art_path
+                .as_deref()
+                .and_then(crate::album_color::dominant_album_color);
+        }
         self.has_active_media = data.has_active_media;
     }
 }
