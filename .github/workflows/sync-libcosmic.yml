@@ -18,6 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
 
       - name: Find the libcosmic revision used by COSMIC applets
         id: upstream
@@ -44,6 +47,12 @@ jobs:
         run: |
           sed -i -E 's|^rev = ".*"|rev = "'"$REVISION"'"|' Cargo.toml
           cargo update -p libcosmic
+
+      - name: Regenerate Flatpak sources
+        run: |
+          git clone --depth=1 https://github.com/flatpak/flatpak-builder-tools.git /tmp/flatpak-builder-tools
+          python -m pip install --disable-pip-version-check aiohttp PyYAML tomlkit
+          python /tmp/flatpak-builder-tools/cargo/flatpak-cargo-generator.py Cargo.lock -o flatpak/cargo-sources.json
 
       - name: Create pull request
         uses: peter-evans/create-pull-request@v7
