@@ -142,9 +142,20 @@ impl cosmic::Application for Window {
                 });
             }
             Message::TogglePlayPause => {
-                let _ = with_player(&self.player_bus_name, |player| {
-                    let _ = player.play_pause();
-                });
+                if matches!(
+                    with_player(&self.player_bus_name, |player| player.play_pause()),
+                    Some(Ok(()))
+                ) {
+                    // The coordinator will verify this shortly, but updating
+                    // immediately makes the control feel responsive without
+                    // increasing the background polling rate.
+                    self.playback_state = match self.playback_state {
+                        PlaybackState::Playing => PlaybackState::Paused,
+                        PlaybackState::Paused | PlaybackState::Stopped | PlaybackState::Unknown => {
+                            PlaybackState::Playing
+                        }
+                    };
+                }
             }
             Message::NextTrack => {
                 let _ = with_player(&self.player_bus_name, |player| {
