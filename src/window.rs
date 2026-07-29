@@ -9,10 +9,11 @@ use cosmic::iced::{
 };
 use cosmic::widget::{button, container, icon, image, slider, text, Column, Row};
 use cosmic::{Action, Element, Task};
+use mpris::LoopStatus;
 
 use crate::coordinator;
 use crate::metadata::{now_playing_from_player_with_sources, now_playing_snapshot, NowPlayingData};
-use crate::player::{cycle_loop_status, select_player, with_player};
+use crate::player::{cycle_loop_status, select_player, toggle_shuffle, with_player};
 
 const ID: &str = "com.github.DiegoMMR.CosmicExtAppletNowPlaying";
 
@@ -34,6 +35,7 @@ pub struct Window {
     can_shuffle: bool,
     shuffle: bool,
     can_loop: bool,
+    loop_status: Option<LoopStatus>,
     playback_state: PlaybackState,
     album_art_path: Option<PathBuf>,
     has_active_media: bool,
@@ -135,17 +137,17 @@ impl cosmic::Application for Window {
                 self.apply_now_playing(data);
             }
             Message::PreviousTrack => {
-                with_player(&self.player_bus_name, |player| {
+                let _ = with_player(&self.player_bus_name, |player| {
                     let _ = player.previous();
                 });
             }
             Message::TogglePlayPause => {
-                with_player(&self.player_bus_name, |player| {
+                let _ = with_player(&self.player_bus_name, |player| {
                     let _ = player.play_pause();
                 });
             }
             Message::NextTrack => {
-                with_player(&self.player_bus_name, |player| {
+                let _ = with_player(&self.player_bus_name, |player| {
                     let _ = player.next();
                 });
             }
@@ -153,25 +155,34 @@ impl cosmic::Application for Window {
                 select_player(bus_name.clone());
                 // Selection is applied immediately; the periodic MPRIS refresh
                 // will reconcile metadata and capabilities on the next tick.
-                with_player(&bus_name, |player| {
+                let _ = with_player(&bus_name, |player| {
                     let data = now_playing_from_player_with_sources(player, self.sources.clone());
                     self.apply_now_playing(data);
                 });
             }
-            Message::ToggleShuffle => with_player(&self.player_bus_name, |player| {
-                if let Ok(shuffle) = player.get_shuffle() {
-                    let _ = player.set_shuffle(!shuffle);
+            Message::ToggleShuffle => {
+                if let Some(shuffle) = with_player(&self.player_bus_name, toggle_shuffle).flatten()
+                {
+                    self.shuffle = shuffle;
                 }
-            }),
-            Message::CycleLoop => with_player(&self.player_bus_name, cycle_loop_status),
-            Message::Seek(offset) => with_player(&self.player_bus_name, |player| {
-                let _ = player.seek(offset);
-            }),
+            }
+            Message::CycleLoop => {
+                if let Some(loop_status) =
+                    with_player(&self.player_bus_name, cycle_loop_status).flatten()
+                {
+                    self.loop_status = Some(loop_status);
+                }
+            }
+            Message::Seek(offset) => {
+                let _ = with_player(&self.player_bus_name, |player| {
+                    let _ = player.seek(offset);
+                });
+            }
             Message::SeekTo(seconds) => {
                 let current = self.position_seconds.unwrap_or(0);
                 let offset = i64::try_from(seconds.saturating_sub(current)).unwrap_or(i64::MAX);
                 let offset = if seconds < current { -offset } else { offset };
-                with_player(&self.player_bus_name, |player| {
+                let _ = with_player(&self.player_bus_name, |player| {
                     let _ = player.seek(offset.saturating_mul(1_000_000));
                 });
             }
@@ -364,20 +375,39 @@ impl cosmic::Application for Window {
                     .align_x(cosmic::iced::alignment::Horizontal::Right),
             );
 
+        let loop_label = match self.loop_status.unwrap_or(LoopStatus::None) {
+            LoopStatus::None => "Off",
+            LoopStatus::Playlist => "All",
+            LoopStatus::Track => "One",
+        };
+        let shuffle = button::icon(icon::from_name("media-playlist-shuffle-symbolic").size(size.0));
+        let shuffle = if self.can_shuffle {
+            shuffle.on_press(Message::ToggleShuffle)
+        } else {
+            shuffle
+        };
+        let shuffle = if self.shuffle {
+            shuffle.class(cosmic::theme::Button::Suggested)
+        } else {
+            shuffle
+        };
+        let loop_button =
+            button::icon(icon::from_name("media-playlist-repeat-symbolic").size(size.0));
+        let loop_button = if self.can_loop {
+            loop_button.on_press(Message::CycleLoop)
+        } else {
+            loop_button
+        };
+        let loop_button = if self.loop_status.unwrap_or(LoopStatus::None) != LoopStatus::None {
+            loop_button.class(cosmic::theme::Button::Suggested)
+        } else {
+            loop_button
+        };
         let mode_controls = Row::new()
             .spacing(8)
-            .push(if self.can_shuffle {
-                button::icon(icon::from_name("media-playlist-shuffle-symbolic").size(size.0))
-                    .on_press(Message::ToggleShuffle)
-            } else {
-                button::icon(icon::from_name("media-playlist-shuffle-symbolic").size(size.0))
-            })
-            .push(if self.can_loop {
-                button::icon(icon::from_name("media-playlist-repeat-symbolic").size(size.0))
-                    .on_press(Message::CycleLoop)
-            } else {
-                button::icon(icon::from_name("media-playlist-repeat-symbolic").size(size.0))
-            });
+            .push(shuffle)
+            .push(loop_button)
+            .push(text(loop_label).size(size.0.saturating_sub(2)));
 
         let source_picker =
             self.sources
@@ -442,6 +472,7 @@ impl Window {
         self.can_shuffle = data.capabilities.shuffle;
         self.shuffle = data.shuffle;
         self.can_loop = data.capabilities.loop_mode;
+        self.loop_status = Some(data.loop_status);
         self.playback_state = data.state;
         self.album_art_path = data.album_art_path;
         self.has_active_media = data.has_active_media;

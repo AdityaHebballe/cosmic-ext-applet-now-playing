@@ -70,6 +70,7 @@ fn monitor_loop(output: &mut mpsc::Sender<NowPlayingData>) {
 mod tests {
     use super::*;
     use crate::metadata::PlaybackCapabilities;
+    use mpris::LoopStatus;
 
     fn snapshot(position_seconds: Option<u64>) -> NowPlayingData {
         NowPlayingData {
@@ -89,6 +90,7 @@ mod tests {
                 loop_mode: true,
             },
             shuffle: false,
+            loop_status: LoopStatus::None,
             state: PlaybackState::Playing,
             album_art_path: None,
             has_active_media: true,

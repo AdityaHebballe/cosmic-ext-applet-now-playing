@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use mpris::PlayerFinder;
+use mpris::{LoopStatus, PlayerFinder};
 
 use crate::fl;
 use crate::player::{
@@ -30,6 +30,7 @@ pub struct NowPlayingData {
     pub position_seconds: Option<u64>,
     pub capabilities: PlaybackCapabilities,
     pub shuffle: bool,
+    pub loop_status: LoopStatus,
     pub state: PlaybackState,
     pub album_art_path: Option<PathBuf>,
     pub has_active_media: bool,
@@ -49,6 +50,7 @@ impl NowPlayingData {
             && self.duration_seconds == other.duration_seconds
             && self.capabilities == other.capabilities
             && self.shuffle == other.shuffle
+            && self.loop_status == other.loop_status
             && self.state == other.state
             && self.album_art_path == other.album_art_path
             && self.has_active_media == other.has_active_media
@@ -77,6 +79,7 @@ pub fn now_playing_snapshot() -> NowPlayingData {
         duration_seconds: None,
         position_seconds: None,
         shuffle: false,
+        loop_status: LoopStatus::None,
         capabilities: PlaybackCapabilities {
             seek: false,
             previous: false,
@@ -128,6 +131,7 @@ pub fn now_playing_from_player_with_sources(
                 loop_mode: player.can_loop().unwrap_or(false),
             },
             shuffle: player.get_shuffle().unwrap_or(false),
+            loop_status: player.get_loop_status().unwrap_or(LoopStatus::None),
             state: playback_state,
             album_art_path,
             has_active_media: true,
@@ -151,6 +155,7 @@ pub fn now_playing_from_player_with_sources(
             loop_mode: false,
         },
         shuffle: false,
+        loop_status: LoopStatus::None,
         state: playback_state,
         album_art_path: None,
         has_active_media: false,

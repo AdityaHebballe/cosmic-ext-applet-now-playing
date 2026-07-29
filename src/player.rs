@@ -220,9 +220,9 @@ pub fn player_sources_from_players(players: &[mpris::Player]) -> Vec<(String, St
         .collect()
 }
 
-pub fn with_player<F>(bus_name: &str, f: F)
+pub fn with_player<F, T>(bus_name: &str, f: F) -> Option<T>
 where
-    F: FnOnce(&mpris::Player),
+    F: FnOnce(&mpris::Player) -> T,
 {
     if let Ok(finder) = PlayerFinder::new() {
         if let Ok(players) = finder.find_all() {
@@ -230,19 +230,35 @@ where
                 .into_iter()
                 .find(|player| player.bus_name() == bus_name)
             {
-                f(&player);
+                return Some(f(&player));
             }
         }
     }
+    None
 }
 
-pub fn cycle_loop_status(player: &mpris::Player) {
-    let next = match player.get_loop_status().unwrap_or(LoopStatus::None) {
+pub fn toggle_shuffle(player: &mpris::Player) -> Option<bool> {
+    let current = player.checked_get_shuffle().ok().flatten()?;
+    let next = !current;
+    player
+        .checked_set_shuffle(next)
+        .ok()
+        .filter(|changed| *changed)?;
+    Some(next)
+}
+
+pub fn cycle_loop_status(player: &mpris::Player) -> Option<LoopStatus> {
+    let current = player.checked_get_loop_status().ok().flatten()?;
+    let next = match current {
         LoopStatus::None => LoopStatus::Playlist,
         LoopStatus::Playlist => LoopStatus::Track,
         LoopStatus::Track => LoopStatus::None,
     };
-    let _ = player.set_loop_status(next);
+    player
+        .checked_set_loop_status(next)
+        .ok()
+        .filter(|changed| *changed)?;
+    Some(next)
 }
 
 #[cfg(test)]
