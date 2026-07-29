@@ -7,7 +7,9 @@ use cosmic::iced::{
     window::Id,
     ContentFit, Length, Subscription,
 };
-use cosmic::widget::{button, container, icon, image, slider, text, Column, Row, Space};
+use cosmic::widget::{
+    button, container, icon, image, mouse_area, slider, text, Column, Row, Space,
+};
 use cosmic::{Action, Element, Task};
 use mpris::LoopStatus;
 
@@ -219,23 +221,38 @@ impl cosmic::Application for Window {
             }
         };
 
-        let panel_previous = self.core.applet.icon_button("media-skip-backward-symbolic");
-        let panel_previous = if self.can_go_previous {
-            panel_previous.on_press(Message::PreviousTrack)
+        const PANEL_TRANSPORT_SIZE: f32 = 28.0;
+        let panel_previous =
+            container(icon::from_name("media-skip-backward-symbolic").size(size.0))
+                .width(Length::Fixed(PANEL_TRANSPORT_SIZE))
+                .height(Length::Fixed(PANEL_TRANSPORT_SIZE))
+                .align_x(cosmic::iced::alignment::Horizontal::Center)
+                .align_y(cosmic::iced::alignment::Vertical::Center);
+        let panel_previous: Element<'_, Message> = if self.can_go_previous {
+            mouse_area(panel_previous)
+                .on_press(Message::PreviousTrack)
+                .into()
         } else {
-            panel_previous
+            panel_previous.into()
         };
-        let panel_next = self.core.applet.icon_button("media-skip-forward-symbolic");
-        let panel_next = if self.can_go_next {
-            panel_next.on_press(Message::NextTrack)
+        let panel_play = container(icon::from_name(transport_icon).size(size.0))
+            .width(Length::Fixed(PANEL_TRANSPORT_SIZE))
+            .height(Length::Fixed(PANEL_TRANSPORT_SIZE))
+            .align_x(cosmic::iced::alignment::Horizontal::Center)
+            .align_y(cosmic::iced::alignment::Vertical::Center);
+        let panel_play: Element<'_, Message> = mouse_area(panel_play)
+            .on_press(Message::TogglePlayPause)
+            .into();
+        let panel_next = container(icon::from_name("media-skip-forward-symbolic").size(size.0))
+            .width(Length::Fixed(PANEL_TRANSPORT_SIZE))
+            .height(Length::Fixed(PANEL_TRANSPORT_SIZE))
+            .align_x(cosmic::iced::alignment::Horizontal::Center)
+            .align_y(cosmic::iced::alignment::Vertical::Center);
+        let panel_next: Element<'_, Message> = if self.can_go_next {
+            mouse_area(panel_next).on_press(Message::NextTrack).into()
         } else {
-            panel_next
+            panel_next.into()
         };
-        let panel_play = self
-            .core
-            .applet
-            .icon_button(transport_icon)
-            .on_press(Message::TogglePlayPause);
         // Keep a fixed slot so the title never shifts when remote cover art
         // finishes downloading. The image handle points at the existing local
         // artwork cache; no extra network request or decode path is created.
@@ -253,35 +270,38 @@ impl cosmic::Application for Window {
                 .height(Length::Fixed(PANEL_ART_SIZE))
                 .into()
         };
-        let track_label = button::custom(
-            Row::new()
-                .spacing(6)
-                .align_y(cosmic::iced::alignment::Vertical::Center)
-                .push(panel_art)
-                .push(
-                    text(self.now_playing_text.as_str())
-                        .size(size.0.saturating_sub(1))
-                        .width(Length::Fixed(200.0))
-                        .wrapping(Wrapping::None)
-                        .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1))),
-                ),
-        )
-        // A slightly larger leading inset keeps the hover surface from
-        // visually hugging the cover thumbnail.
-        .padding([4, 6, 4, 8])
-        .class(cosmic::theme::Button::AppletIcon)
-        .on_press(Message::TogglePopup);
-        let row_content = Row::new()
+        let panel_content = Row::new()
             .spacing(pad.0)
-            .padding([0, pad.0])
             .align_y(cosmic::iced::alignment::Vertical::Center)
             .push(panel_previous)
             .push(panel_play)
             .push(panel_next)
-            .push(track_label);
+            .push(
+                Row::new()
+                    .spacing(6)
+                    .align_y(cosmic::iced::alignment::Vertical::Center)
+                    .push(panel_art)
+                    .push(
+                        text(self.now_playing_text.as_str())
+                            .size(size.0.saturating_sub(1))
+                            .width(Length::Fixed(200.0))
+                            .wrapping(Wrapping::None)
+                            .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1))),
+                    ),
+            );
+        let panel_card = button::custom(panel_content)
+            // A single applet button provides one shared hover surface; the
+            // mouse areas above capture transport clicks before this popup action.
+            .padding([4, 6, 4, 8])
+            .class(cosmic::theme::Button::AppletIcon)
+            .on_press(Message::TogglePopup);
+        let row_content = Row::new()
+            .padding([0, pad.0])
+            .align_y(cosmic::iced::alignment::Vertical::Center)
+            .push(panel_card);
 
-        // Each panel action is its own applet button; nesting them inside one
-        // catch-all popup button would swallow the transport clicks.
+        // The complete panel control is one visual unit, while transport
+        // regions retain their own input handling.
         self.core.applet.autosize_window(row_content).into()
     }
 
