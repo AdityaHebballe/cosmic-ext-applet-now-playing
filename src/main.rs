@@ -1,3 +1,4 @@
+mod coordinator;
 mod i18n;
 mod metadata;
 mod player;

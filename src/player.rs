@@ -10,7 +10,6 @@ use mpris::{LoopStatus, PlaybackStatus, PlayerFinder};
 use crate::window::PlaybackState;
 
 static SELECTED_PLAYER: OnceLock<Mutex<Option<String>>> = OnceLock::new();
-static PLAYER_SOURCES_CACHE: OnceLock<Mutex<(Instant, Vec<(String, String)>)>> = OnceLock::new();
 static ART_DOWNLOADS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 static ART_FAILURES: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
 
@@ -24,19 +23,21 @@ pub fn select_player(bus_name: String) {
     }
 }
 
-pub fn find_selected_or_active(finder: &PlayerFinder) -> Option<mpris::Player> {
+/// Select the explicitly chosen source when it still exists; otherwise follow
+/// MPRIS' active-player preference (playing, paused, metadata, first player).
+/// Taking the already enumerated player list lets a poll build its source list
+/// and chosen snapshot from a single DBus enumeration.
+pub fn find_selected_or_active_from_players(players: Vec<mpris::Player>) -> Option<mpris::Player> {
     let selected = selected_player_slot()
         .lock()
         .ok()
         .and_then(|selected| selected.clone());
     if let Some(bus_name) = selected {
-        if let Ok(players) = finder.find_all() {
-            if let Some(player) = players
-                .into_iter()
-                .find(|player| player.bus_name() == bus_name)
-            {
-                return Some(player);
-            }
+        if let Some(player) = players
+            .iter()
+            .position(|player| player.bus_name() == bus_name)
+        {
+            return players.into_iter().nth(player);
         }
         // A selected player which has exited should not trap the applet on an
         // empty source forever.
@@ -44,7 +45,26 @@ pub fn find_selected_or_active(finder: &PlayerFinder) -> Option<mpris::Player> {
             *selected = None;
         }
     }
-    finder.find_active().ok()
+    let mut first_paused = None;
+    let mut first_with_track = None;
+    let mut first_found = None;
+    for player in players {
+        match player.get_playback_status() {
+            Ok(PlaybackStatus::Playing) => return Some(player),
+            Ok(PlaybackStatus::Paused) if first_paused.is_none() => first_paused = Some(player),
+            _ if first_with_track.is_none()
+                && player
+                    .get_metadata()
+                    .map(|metadata| !metadata.is_empty())
+                    .unwrap_or(false) =>
+            {
+                first_with_track = Some(player)
+            }
+            _ if first_found.is_none() => first_found = Some(player),
+            _ => {}
+        }
+    }
+    first_paused.or(first_with_track).or(first_found)
 }
 
 pub fn playback_state_from_player(player: &mpris::Player) -> PlaybackState {
@@ -193,6 +213,38 @@ fn hex_value(byte: u8) -> Option<u8> {
     }
 }
 
+pub fn player_sources_from_players(players: &[mpris::Player]) -> Vec<(String, String)> {
+    players
+        .iter()
+        .map(|player| (player.bus_name().to_owned(), player.identity().to_owned()))
+        .collect()
+}
+
+pub fn with_player<F>(bus_name: &str, f: F)
+where
+    F: FnOnce(&mpris::Player),
+{
+    if let Ok(finder) = PlayerFinder::new() {
+        if let Ok(players) = finder.find_all() {
+            if let Some(player) = players
+                .into_iter()
+                .find(|player| player.bus_name() == bus_name)
+            {
+                f(&player);
+            }
+        }
+    }
+}
+
+pub fn cycle_loop_status(player: &mpris::Player) {
+    let next = match player.get_loop_status().unwrap_or(LoopStatus::None) {
+        LoopStatus::None => LoopStatus::Playlist,
+        LoopStatus::Playlist => LoopStatus::Track,
+        LoopStatus::Track => LoopStatus::None,
+    };
+    let _ = player.set_loop_status(next);
+}
+
 #[cfg(test)]
 mod tests {
     use super::{file_url_to_path, image_extension};
@@ -219,50 +271,4 @@ mod tests {
         );
         assert_eq!(image_extension("https://example.com/cover"), "jpg");
     }
-}
-
-pub fn player_sources() -> Vec<(String, String)> {
-    let cache = PLAYER_SOURCES_CACHE
-        .get_or_init(|| Mutex::new((Instant::now() - Duration::from_secs(60), Vec::new())));
-    if let Ok(cache) = cache.lock() {
-        if cache.0.elapsed() < Duration::from_secs(5) {
-            return cache.1.clone();
-        }
-    }
-    let sources: Vec<_> = PlayerFinder::new()
-        .ok()
-        .and_then(|finder| finder.find_all().ok())
-        .unwrap_or_default()
-        .into_iter()
-        .map(|player| (player.bus_name().to_owned(), player.identity().to_owned()))
-        .collect();
-    if let Ok(mut cache) = cache.lock() {
-        *cache = (Instant::now(), sources.clone());
-    }
-    sources
-}
-
-pub fn with_player<F>(bus_name: &str, f: F)
-where
-    F: FnOnce(&mpris::Player),
-{
-    if let Ok(finder) = PlayerFinder::new() {
-        if let Ok(players) = finder.find_all() {
-            if let Some(player) = players
-                .into_iter()
-                .find(|player| player.bus_name() == bus_name)
-            {
-                f(&player);
-            }
-        }
-    }
-}
-
-pub fn cycle_loop_status(player: &mpris::Player) {
-    let next = match player.get_loop_status().unwrap_or(LoopStatus::None) {
-        LoopStatus::None => LoopStatus::Playlist,
-        LoopStatus::Playlist => LoopStatus::Track,
-        LoopStatus::Track => LoopStatus::None,
-    };
-    let _ = player.set_loop_status(next);
 }

@@ -4,12 +4,12 @@ use mpris::PlayerFinder;
 
 use crate::fl;
 use crate::player::{
-    album_art_path_from_metadata, find_selected_or_active, playback_state_from_player,
-    player_sources,
+    album_art_path_from_metadata, find_selected_or_active_from_players, playback_state_from_player,
+    player_sources_from_players,
 };
 use crate::window::PlaybackState;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlaybackCapabilities {
     pub seek: bool,
     pub previous: bool,
@@ -18,7 +18,7 @@ pub struct PlaybackCapabilities {
     pub loop_mode: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NowPlayingData {
     pub text: String,
     pub title: String,
@@ -35,12 +35,35 @@ pub struct NowPlayingData {
     pub has_active_media: bool,
 }
 
+impl NowPlayingData {
+    /// Compares the state that matters while the popup is closed. Playback
+    /// position is deliberately excluded so an active player does not wake
+    /// the applet once a second merely to redraw an invisible seek bar.
+    pub fn same_except_position(&self, other: &Self) -> bool {
+        self.text == other.text
+            && self.title == other.title
+            && self.artist == other.artist
+            && self.album == other.album
+            && self.player_bus_name == other.player_bus_name
+            && self.sources == other.sources
+            && self.duration_seconds == other.duration_seconds
+            && self.capabilities == other.capabilities
+            && self.shuffle == other.shuffle
+            && self.state == other.state
+            && self.album_art_path == other.album_art_path
+            && self.has_active_media == other.has_active_media
+    }
+}
+
 pub fn now_playing_snapshot() -> NowPlayingData {
     let finder = PlayerFinder::new();
 
     if let Ok(finder) = finder {
-        if let Some(player) = find_selected_or_active(&finder) {
-            return now_playing_from_player(&player);
+        if let Ok(players) = finder.find_all() {
+            let sources = player_sources_from_players(&players);
+            if let Some(player) = find_selected_or_active_from_players(players) {
+                return now_playing_from_player_with_sources(&player, sources);
+            }
         }
     }
 
@@ -67,7 +90,10 @@ pub fn now_playing_snapshot() -> NowPlayingData {
     }
 }
 
-pub fn now_playing_from_player(player: &mpris::Player) -> NowPlayingData {
+pub fn now_playing_from_player_with_sources(
+    player: &mpris::Player,
+    sources: Vec<(String, String)>,
+) -> NowPlayingData {
     let playback_state = playback_state_from_player(player);
 
     if let Ok(meta) = player.get_metadata() {
@@ -88,7 +114,7 @@ pub fn now_playing_from_player(player: &mpris::Player) -> NowPlayingData {
             artist,
             album: meta.album_name().unwrap_or_default().to_owned(),
             player_bus_name: player.bus_name().to_owned(),
-            sources: player_sources(),
+            sources,
             duration_seconds: meta.length().map(|duration| duration.as_secs()),
             position_seconds: player
                 .get_position()
