@@ -54,7 +54,12 @@ pub enum PlaybackState {
 
 #[derive(Clone, Debug)]
 pub enum Message {
-    TogglePopup,
+    TogglePopup {
+        anchor_x: i32,
+        anchor_y: i32,
+        anchor_width: i32,
+        anchor_height: i32,
+    },
     PopupClosed(Id),
     NowPlayingChanged(NowPlayingData),
     PreviousTrack,
@@ -106,24 +111,39 @@ impl cosmic::Application for Window {
 
     fn update(&mut self, message: Message) -> Task<Action<Self::Message>> {
         match message {
-            Message::TogglePopup => {
+            Message::TogglePopup {
+                anchor_x,
+                anchor_y,
+                anchor_width,
+                anchor_height,
+            } => {
                 return if let Some(popup_id) = self.popup.take() {
                     coordinator::set_popup_open(false);
                     cosmic::surface::surface_task(cosmic::surface::action::destroy_popup(popup_id))
                 } else {
                     cosmic::surface::surface_task(cosmic::surface::action::app_popup(
                         |_| Default::default(),
-                        |app: &mut Self| {
+                        move |app: &mut Self| {
                             coordinator::set_popup_open(true);
                             let new_id = Id::unique();
                             app.popup.replace(new_id);
-                            app.core.applet.get_popup_settings(
+                            let mut settings = app.core.applet.get_popup_settings(
                                 app.core.main_window_id().unwrap(),
                                 new_id,
                                 None,
                                 None,
                                 None,
-                            )
+                            );
+                            // `get_popup_settings` uses an icon-sized anchor by
+                            // default. This applet is a wide media control, so
+                            // anchor to the actual clicked card instead.
+                            settings.positioner.anchor_rect = cosmic::iced::Rectangle {
+                                x: anchor_x,
+                                y: anchor_y,
+                                width: anchor_width,
+                                height: anchor_height,
+                            };
+                            settings
                         },
                         None,
                     ))
@@ -294,7 +314,12 @@ impl cosmic::Application for Window {
             // mouse areas above capture transport clicks before this popup action.
             .padding([4, 6, 4, 8])
             .class(cosmic::theme::Button::AppletIcon)
-            .on_press(Message::TogglePopup);
+            .on_press_with_rectangle(|offset, bounds| Message::TogglePopup {
+                anchor_x: (bounds.x - offset.x).round() as i32,
+                anchor_y: (bounds.y - offset.y).round() as i32,
+                anchor_width: bounds.width.round() as i32,
+                anchor_height: bounds.height.round() as i32,
+            });
         let row_content = Row::new()
             .padding([0, pad.0])
             .align_y(cosmic::iced::alignment::Vertical::Center)
