@@ -7,7 +7,7 @@ use cosmic::iced::{
     window::Id,
     ContentFit, Length, Subscription,
 };
-use cosmic::widget::{button, container, icon, image, slider, text, Column, Row};
+use cosmic::widget::{button, container, icon, image, slider, text, Column, Row, Space};
 use cosmic::{Action, Element, Task};
 use mpris::LoopStatus;
 
@@ -225,13 +225,39 @@ impl cosmic::Application for Window {
             .applet
             .icon_button(transport_icon)
             .on_press(Message::TogglePlayPause);
+        // Keep a fixed slot so the title never shifts when remote cover art
+        // finishes downloading. The image handle points at the existing local
+        // artwork cache; no extra network request or decode path is created.
+        const PANEL_ART_SIZE: f32 = 24.0;
+        let panel_art: Element<'_, Message> = if let Some(path) = self.album_art_path.as_ref() {
+            image(image::Handle::from_path(path.clone()))
+                .width(Length::Fixed(PANEL_ART_SIZE))
+                .height(Length::Fixed(PANEL_ART_SIZE))
+                .content_fit(ContentFit::Cover)
+                .border_radius(4.0)
+                .into()
+        } else {
+            Space::new()
+                .width(Length::Fixed(PANEL_ART_SIZE))
+                .height(Length::Fixed(PANEL_ART_SIZE))
+                .into()
+        };
         let track_label = button::custom(
-            text(self.now_playing_text.as_str())
-                .size(size.0.saturating_sub(1))
-                .width(Length::Fixed(200.0))
-                .wrapping(Wrapping::None)
-                .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1))),
+            Row::new()
+                .spacing(6)
+                .align_y(cosmic::iced::alignment::Vertical::Center)
+                .push(panel_art)
+                .push(
+                    text(self.now_playing_text.as_str())
+                        .size(size.0.saturating_sub(1))
+                        .width(Length::Fixed(200.0))
+                        .wrapping(Wrapping::None)
+                        .ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1))),
+                ),
         )
+        // A slightly larger leading inset keeps the hover surface from
+        // visually hugging the cover thumbnail.
+        .padding([4, 6, 4, 8])
         .class(cosmic::theme::Button::AppletIcon)
         .on_press(Message::TogglePopup);
         let row_content = Row::new()
