@@ -160,9 +160,12 @@ impl cosmic::Application for Window {
                 self.apply_now_playing(data);
             }
             Message::PreviousTrack => {
-                let _ = with_player(&self.player_bus_name, |player| {
-                    let _ = player.previous();
-                });
+                if matches!(
+                    with_player(&self.player_bus_name, |player| player.previous()),
+                    Some(Ok(()))
+                ) {
+                    coordinator::request_refresh();
+                }
             }
             Message::TogglePlayPause => {
                 if matches!(
@@ -178,12 +181,16 @@ impl cosmic::Application for Window {
                             PlaybackState::Playing
                         }
                     };
+                    coordinator::request_refresh();
                 }
             }
             Message::NextTrack => {
-                let _ = with_player(&self.player_bus_name, |player| {
-                    let _ = player.next();
-                });
+                if matches!(
+                    with_player(&self.player_bus_name, |player| player.next()),
+                    Some(Ok(()))
+                ) {
+                    coordinator::request_refresh();
+                }
             }
             Message::SelectSource(bus_name) => {
                 select_player(bus_name.clone());
@@ -199,6 +206,7 @@ impl cosmic::Application for Window {
                 if let Some(shuffle) = with_player(&self.player_bus_name, toggle_shuffle).flatten()
                 {
                     self.shuffle = shuffle;
+                    coordinator::request_refresh();
                 }
             }
             Message::CycleLoop => {
@@ -206,6 +214,7 @@ impl cosmic::Application for Window {
                     with_player(&self.player_bus_name, cycle_loop_status).flatten()
                 {
                     self.loop_status = Some(loop_status);
+                    coordinator::request_refresh();
                 }
             }
             Message::Seek(offset) => {
