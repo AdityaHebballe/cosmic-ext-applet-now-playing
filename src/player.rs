@@ -10,10 +10,13 @@ use url::Url;
 
 use crate::window::PlaybackState;
 
+type ArtworkDimensions = Option<(u32, u32)>;
+type ArtworkDimensionsCache = HashMap<PathBuf, ArtworkDimensions>;
+
 static SELECTED_PLAYER: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 static ART_DOWNLOADS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 static ART_FAILURES: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
-static ART_DIMENSIONS: OnceLock<Mutex<HashMap<PathBuf, Option<(u32, u32)>>>> = OnceLock::new();
+static ART_DIMENSIONS: OnceLock<Mutex<ArtworkDimensionsCache>> = OnceLock::new();
 static LAST_CACHE_PRUNE: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
 
 const MAX_ART_DOWNLOADS: usize = 2;
@@ -92,7 +95,7 @@ pub fn album_art_path_from_metadata(meta: &mpris::Metadata) -> Option<PathBuf> {
 
 /// Read dimensions once per artwork path so the panel can reserve the
 /// thumbnail's natural width without decoding it during every redraw.
-pub fn album_art_dimensions(path: &Path) -> Option<(u32, u32)> {
+pub fn album_art_dimensions(path: &Path) -> ArtworkDimensions {
     let read_dimensions = || {
         imagesize::size(path).ok().and_then(|size| {
             u32::try_from(size.width)
@@ -194,7 +197,7 @@ fn is_downloadable_art_url(url: &str) -> bool {
     url.starts_with("https://")
 }
 
-fn prune_album_art_cache(cache_dir: &PathBuf) {
+fn prune_album_art_cache(cache_dir: &Path) {
     let now = Instant::now();
     let should_prune = LAST_CACHE_PRUNE
         .get_or_init(|| Mutex::new(None))
@@ -212,6 +215,20 @@ fn prune_album_art_cache(cache_dir: &PathBuf) {
         return;
     }
 
+    prune_album_art_cache_with_limits(
+        cache_dir,
+        SystemTime::now(),
+        MAX_ART_CACHE_AGE,
+        MAX_ART_CACHE_BYTES,
+    );
+}
+
+fn prune_album_art_cache_with_limits(
+    cache_dir: &Path,
+    now: SystemTime,
+    max_age: Duration,
+    max_bytes: u64,
+) {
     let Ok(entries) = fs::read_dir(cache_dir) else {
         return;
     };
@@ -232,7 +249,7 @@ fn prune_album_art_cache(cache_dir: &PathBuf) {
             continue;
         }
         let modified = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-        if modified.elapsed().unwrap_or_default() > MAX_ART_CACHE_AGE {
+        if now.duration_since(modified).unwrap_or_default() > max_age {
             let _ = fs::remove_file(entry.path());
             continue;
         }
@@ -242,7 +259,7 @@ fn prune_album_art_cache(cache_dir: &PathBuf) {
 
     files.sort_by_key(|(modified, _, _)| *modified);
     for (_, size, path) in files {
-        if total_size <= MAX_ART_CACHE_BYTES {
+        if total_size <= max_bytes {
             break;
         }
         if fs::remove_file(path).is_ok() {
@@ -355,14 +372,44 @@ pub fn cycle_loop_status(player: &mpris::Player) -> Option<LoopStatus> {
 
 #[cfg(test)]
 mod tests {
-    use super::{file_url_to_path, image_extension, is_downloadable_art_url};
+    use super::{
+        album_art_dimensions, file_url_to_path, image_extension, is_downloadable_art_url,
+        prune_album_art_cache_with_limits, MAX_ART_CACHE_AGE,
+    };
+    use std::fs;
     use std::path::PathBuf;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    fn temporary_directory(name: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "cosmic-now-playing-{name}-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
 
     #[test]
     fn parses_file_url_paths() {
         assert_eq!(
             file_url_to_path("file:///home/user/Music/Album%20Art.png"),
             Some(PathBuf::from("/home/user/Music/Album Art.png"))
+        );
+    }
+
+    #[test]
+    fn handles_localhost_and_unicode_file_urls() {
+        assert_eq!(
+            file_url_to_path("file://localhost/home/user/M%C3%BAsica.png"),
+            Some(PathBuf::from("/home/user/Música.png"))
+        );
+        assert_eq!(
+            file_url_to_path("file://example.com/home/user/cover.png"),
+            None
         );
     }
 
@@ -390,5 +437,58 @@ mod tests {
         assert!(is_downloadable_art_url("https://example.com/cover.jpg"));
         assert!(!is_downloadable_art_url("http://example.com/cover.jpg"));
         assert!(!is_downloadable_art_url("file:///tmp/cover.jpg"));
+    }
+
+    #[test]
+    fn caches_album_art_dimensions() {
+        let directory = temporary_directory("dimensions");
+        let image = directory.join("cover.png");
+        fs::write(
+            &image,
+            [
+                0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, b'I', b'H', b'D',
+                b'R', 0, 0, 0, 2, 0, 0, 0, 3,
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(album_art_dimensions(&image), Some((2, 3)));
+        fs::remove_file(&image).unwrap();
+        assert_eq!(album_art_dimensions(&image), Some((2, 3)));
+        assert_eq!(album_art_dimensions(&directory.join("missing.png")), None);
+
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn prunes_expired_and_oversized_album_art_cache() {
+        let directory = temporary_directory("prune");
+        let expired = directory.join("expired.jpg");
+        fs::write(&expired, b"old").unwrap();
+        prune_album_art_cache_with_limits(
+            &directory,
+            SystemTime::now() + MAX_ART_CACHE_AGE + Duration::from_secs(1),
+            MAX_ART_CACHE_AGE,
+            100,
+        );
+        assert!(!expired.exists());
+
+        for name in ["one.jpg", "two.jpg", "three.jpg"] {
+            fs::write(directory.join(name), [0_u8; 8]).unwrap();
+        }
+        prune_album_art_cache_with_limits(
+            &directory,
+            SystemTime::now(),
+            Duration::from_secs(365 * 24 * 60 * 60),
+            10,
+        );
+        let remaining_bytes = fs::read_dir(&directory)
+            .unwrap()
+            .flatten()
+            .map(|entry| entry.metadata().unwrap().len())
+            .sum::<u64>();
+        assert!(remaining_bytes <= 10);
+
+        fs::remove_dir_all(directory).unwrap();
     }
 }

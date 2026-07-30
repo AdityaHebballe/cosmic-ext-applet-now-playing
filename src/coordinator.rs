@@ -160,4 +160,13 @@ mod tests {
     fn static_comparison_ignores_position() {
         assert!(snapshot(Some(1)).same_except_position(&snapshot(Some(2))));
     }
+
+    #[test]
+    fn static_comparison_includes_album_art_dimensions() {
+        let original = snapshot(Some(1));
+        let mut resized_art = original.clone();
+        resized_art.album_art_dimensions = Some((16, 9));
+
+        assert!(!original.same_except_position(&resized_art));
+    }
 }
