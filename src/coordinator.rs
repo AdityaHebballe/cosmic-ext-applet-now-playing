@@ -10,8 +10,10 @@ use std::time::Duration;
 
 use cosmic::iced::futures::channel::mpsc;
 use cosmic::iced::{stream::channel, Subscription};
+use mpris::PlayerFinder;
 
 use crate::metadata::{now_playing_snapshot, NowPlayingData};
+use crate::player::find_selected_or_active_from_players;
 use crate::window::PlaybackState;
 
 static POPUP_OPEN: AtomicBool = AtomicBool::new(false);
@@ -22,6 +24,12 @@ const BACKGROUND_INTERVAL: Duration = Duration::from_secs(3);
 
 pub fn set_popup_open(open: bool) {
     POPUP_OPEN.store(open, Ordering::Relaxed);
+    request_refresh();
+}
+
+/// Request one immediate snapshot without changing the normal polling rate.
+/// This is used for MPRIS signals and user-initiated media commands.
+pub fn request_refresh() {
     let (pending, wake) = POLL_WAKE.get_or_init(|| (Mutex::new(false), Condvar::new()));
     if let Ok(mut pending) = pending.lock() {
         *pending = true;
@@ -33,8 +41,38 @@ pub fn subscription() -> Subscription<NowPlayingData> {
     Subscription::run(|| {
         channel(8, |mut output: mpsc::Sender<NowPlayingData>| async move {
             thread::spawn(move || monitor_loop(&mut output));
+            thread::spawn(watch_mpris_events);
         })
     })
+}
+
+/// Wait for MPRIS signals from the currently selected/active player. The
+/// iterator blocks in D-Bus while idle, so it adds no polling work. A normal
+/// polling pass remains as a fallback for players which do not emit signals.
+fn watch_mpris_events() {
+    loop {
+        let player = PlayerFinder::new()
+            .ok()
+            .and_then(|finder| finder.find_all().ok())
+            .and_then(find_selected_or_active_from_players);
+
+        let Some(player) = player else {
+            thread::sleep(BACKGROUND_INTERVAL);
+            continue;
+        };
+
+        let Ok(mut events) = player.events() else {
+            thread::sleep(BACKGROUND_INTERVAL);
+            continue;
+        };
+
+        // Re-select the player after every event. A player can become active
+        // or disappear between signals, and the coordinator will obtain the
+        // complete fresh snapshot.
+        if events.next().is_some() {
+            request_refresh();
+        }
+    }
 }
 
 fn monitor_loop(output: &mut mpsc::Sender<NowPlayingData>) {
@@ -113,6 +151,7 @@ mod tests {
             loop_status: LoopStatus::None,
             state: PlaybackState::Playing,
             album_art_path: None,
+            album_art_dimensions: None,
             has_active_media: true,
         }
     }

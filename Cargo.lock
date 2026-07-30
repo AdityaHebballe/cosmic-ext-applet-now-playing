@@ -955,6 +955,7 @@ version = "0.1.0"
 dependencies = [
  "i18n-embed 0.15.4",
  "i18n-embed-fl 0.9.4",
+ "imagesize",
  "libcosmic",
  "mpris",
  "rust-embed",

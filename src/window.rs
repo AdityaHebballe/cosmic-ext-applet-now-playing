@@ -40,6 +40,7 @@ pub struct Window {
     loop_status: Option<LoopStatus>,
     playback_state: PlaybackState,
     album_art_path: Option<PathBuf>,
+    album_art_dimensions: Option<(u32, u32)>,
     has_active_media: bool,
 }
 
@@ -278,16 +279,34 @@ impl cosmic::Application for Window {
         // finishes downloading. The image handle points at the existing local
         // artwork cache; no extra network request or decode path is created.
         const PANEL_ART_SIZE: f32 = 24.0;
+        const PANEL_ART_GAP: f32 = 14.0;
+        const PANEL_ART_MAX_WIDTH: f32 = 44.0;
+        let panel_art_width = self
+            .album_art_dimensions
+            .and_then(|(width, height)| {
+                (height != 0).then(|| {
+                    (PANEL_ART_SIZE * width as f32 / height as f32).clamp(1.0, PANEL_ART_MAX_WIDTH)
+                })
+            })
+            .unwrap_or(PANEL_ART_SIZE);
         let panel_art: Element<'_, Message> = if let Some(path) = self.album_art_path.as_ref() {
-            image(image::Handle::from_path(path.clone()))
-                .width(Length::Fixed(PANEL_ART_SIZE))
-                .height(Length::Fixed(PANEL_ART_SIZE))
-                .content_fit(ContentFit::Cover)
-                .border_radius(4.0)
-                .into()
+            // Preserve the source aspect ratio in the panel. The row reserves
+            // this exact width, so the title gap begins at the visible image
+            // edge for both square covers and wide video thumbnails.
+            container(
+                image(image::Handle::from_path(path.clone()))
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .content_fit(ContentFit::Contain)
+                    .border_radius(4.0),
+            )
+            .width(Length::Fixed(panel_art_width))
+            .height(Length::Fixed(PANEL_ART_SIZE))
+            .clip(true)
+            .into()
         } else {
             Space::new()
-                .width(Length::Fixed(PANEL_ART_SIZE))
+                .width(Length::Fixed(panel_art_width))
                 .height(Length::Fixed(PANEL_ART_SIZE))
                 .into()
         };
@@ -299,7 +318,7 @@ impl cosmic::Application for Window {
             .push(panel_next)
             .push(
                 Row::new()
-                    .spacing(6)
+                    .spacing(PANEL_ART_GAP)
                     .align_y(cosmic::iced::alignment::Vertical::Center)
                     .push(panel_art)
                     .push(
@@ -581,6 +600,7 @@ impl Window {
         self.loop_status = Some(data.loop_status);
         self.playback_state = data.state;
         self.album_art_path = data.album_art_path;
+        self.album_art_dimensions = data.album_art_dimensions;
         self.has_active_media = data.has_active_media;
     }
 }

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{self, Read};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime};
 
@@ -13,6 +13,7 @@ use crate::window::PlaybackState;
 static SELECTED_PLAYER: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 static ART_DOWNLOADS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 static ART_FAILURES: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
+static ART_DIMENSIONS: OnceLock<Mutex<HashMap<PathBuf, Option<(u32, u32)>>>> = OnceLock::new();
 static LAST_CACHE_PRUNE: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
 
 const MAX_ART_DOWNLOADS: usize = 2;
@@ -87,6 +88,26 @@ pub fn playback_state_from_player(player: &mpris::Player) -> PlaybackState {
 pub fn album_art_path_from_metadata(meta: &mpris::Metadata) -> Option<PathBuf> {
     let art_url = meta.art_url()?;
     file_url_to_path(art_url).or_else(|| download_remote_album_art(art_url))
+}
+
+/// Read dimensions once per artwork path so the panel can reserve the
+/// thumbnail's natural width without decoding it during every redraw.
+pub fn album_art_dimensions(path: &Path) -> Option<(u32, u32)> {
+    let read_dimensions = || {
+        imagesize::size(path).ok().and_then(|size| {
+            u32::try_from(size.width)
+                .ok()
+                .zip(u32::try_from(size.height).ok())
+        })
+    };
+
+    let dimensions = ART_DIMENSIONS.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(mut dimensions) = dimensions.lock() {
+        return *dimensions
+            .entry(path.to_owned())
+            .or_insert_with(read_dimensions);
+    }
+    read_dimensions()
 }
 
 /// MPRIS players are allowed to publish either a local `file://` URL or a

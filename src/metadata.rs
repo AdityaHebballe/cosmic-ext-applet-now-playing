@@ -4,8 +4,8 @@ use mpris::{LoopStatus, PlayerFinder};
 
 use crate::fl;
 use crate::player::{
-    album_art_path_from_metadata, find_selected_or_active_from_players, playback_state_from_player,
-    player_sources_from_players,
+    album_art_dimensions, album_art_path_from_metadata, find_selected_or_active_from_players,
+    playback_state_from_player, player_sources_from_players,
 };
 use crate::window::PlaybackState;
 
@@ -33,6 +33,7 @@ pub struct NowPlayingData {
     pub loop_status: LoopStatus,
     pub state: PlaybackState,
     pub album_art_path: Option<PathBuf>,
+    pub album_art_dimensions: Option<(u32, u32)>,
     pub has_active_media: bool,
 }
 
@@ -53,6 +54,7 @@ impl NowPlayingData {
             && self.loop_status == other.loop_status
             && self.state == other.state
             && self.album_art_path == other.album_art_path
+            && self.album_art_dimensions == other.album_art_dimensions
             && self.has_active_media == other.has_active_media
     }
 }
@@ -89,6 +91,7 @@ pub fn now_playing_snapshot(include_position: bool) -> NowPlayingData {
         },
         state: PlaybackState::Stopped,
         album_art_path: None,
+        album_art_dimensions: None,
         has_active_media: false,
     }
 }
@@ -111,6 +114,7 @@ pub fn now_playing_from_player_with_sources(
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| fl!("unknown-artist"));
         let album_art_path = album_art_path_from_metadata(&meta);
+        let album_art_dimensions = album_art_path.as_deref().and_then(album_art_dimensions);
 
         return NowPlayingData {
             text: format!("{title} • {artist}"),
@@ -139,6 +143,7 @@ pub fn now_playing_from_player_with_sources(
             loop_status: player.get_loop_status().unwrap_or(LoopStatus::None),
             state: playback_state,
             album_art_path,
+            album_art_dimensions,
             has_active_media: true,
         };
     }
@@ -163,6 +168,7 @@ pub fn now_playing_from_player_with_sources(
         loop_status: LoopStatus::None,
         state: playback_state,
         album_art_path: None,
+        album_art_dimensions: None,
         has_active_media: false,
     }
 }
