@@ -14,8 +14,8 @@
     {
         "type": "git",
         "url": "https://github.com/pop-os/libcosmic",
-        "commit": "ef490df50b0a05a21c494c3f75737581bf0b39d9",
-        "dest": "flatpak-cargo/git/libcosmic-ef490df"
+        "commit": "c003a58fff660f5c55ebfb54a5908722fa7d1d6e",
+        "dest": "flatpak-cargo/git/libcosmic-c003a58"
     },
     {
         "type": "git",
@@ -887,7 +887,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-ef490df/iced/build_helpers\" \"cargo/vendor/build_helpers\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-c003a58/iced/build_helpers\" \"cargo/vendor/build_helpers\""
         ]
     },
     {
@@ -1333,7 +1333,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-ef490df/cosmic-config\" \"cargo/vendor/cosmic-config\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-c003a58/cosmic-config\" \"cargo/vendor/cosmic-config\""
         ]
     },
     {
@@ -1369,7 +1369,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-ef490df/cosmic-config-derive\" \"cargo/vendor/cosmic-config-derive\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-c003a58/cosmic-config-derive\" \"cargo/vendor/cosmic-config-derive\""
         ]
     },
     {
@@ -3015,7 +3015,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-ef490df/iced/core\" \"cargo/vendor/iced_core\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-c003a58/iced/core\" \"cargo/vendor/iced_core\""
         ]
     },
     {
@@ -3069,7 +3069,7 @@
     {
         "type": "shell",
         "commands": [
-            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-ef490df/iced/futures\" \"cargo/vendor/iced_futures\""
+            "cp -r --reflink=auto \"flatpak-cargo/git/libcosmic-c003a58/iced/futures\" \"cargo/vendor/iced_futures\""
         ]
     },
     {
