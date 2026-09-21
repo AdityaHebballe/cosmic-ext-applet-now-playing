@@ -610,7 +610,7 @@ dependencies = [
 [[package]]
 name = "build_helpers"
 version = "0.14.0"
-source = "git+https://github.com/pop-os/libcosmic.git#7e82198ab1aba712640b0167e58ad37bf03012ca"
+source = "git+https://github.com/pop-os/libcosmic.git#87ab8179e1bd9880239c340855ae8862034bd0e8"
 dependencies = [
  "cfg_aliases",
 ]
@@ -925,7 +925,7 @@ dependencies = [
 [[package]]
 name = "cosmic-config"
 version = "1.0.0"
-source = "git+https://github.com/pop-os/libcosmic.git#7e82198ab1aba712640b0167e58ad37bf03012ca"
+source = "git+https://github.com/pop-os/libcosmic.git#87ab8179e1bd9880239c340855ae8862034bd0e8"
 dependencies = [
  "atomicwrites",
  "cosmic-config-derive 1.0.0 (git+https://github.com/pop-os/libcosmic.git)",
@@ -951,7 +951,7 @@ dependencies = [
 [[package]]
 name = "cosmic-config-derive"
 version = "1.0.0"
-source = "git+https://github.com/pop-os/libcosmic.git#7e82198ab1aba712640b0167e58ad37bf03012ca"
+source = "git+https://github.com/pop-os/libcosmic.git#87ab8179e1bd9880239c340855ae8862034bd0e8"
 dependencies = [
  "quote",
  "syn 2.0.118",
@@ -987,8 +987,8 @@ dependencies = [
 
 [[package]]
 name = "cosmic-panel-config"
-version = "0.1.0"
-source = "git+https://github.com/pop-os/cosmic-panel#15ba731b0850e5733a1f3bb51d5d48d58e6ce35b"
+version = "1.9.0"
+source = "git+https://github.com/pop-os/cosmic-panel#d6387697faf96f1a9cb04e580753089eec350249"
 dependencies = [
  "anyhow",
  "cosmic-config 1.0.0 (git+https://github.com/pop-os/libcosmic.git)",
@@ -2219,7 +2219,7 @@ dependencies = [
 [[package]]
 name = "iced_core"
 version = "0.14.0"
-source = "git+https://github.com/pop-os/libcosmic.git#7e82198ab1aba712640b0167e58ad37bf03012ca"
+source = "git+https://github.com/pop-os/libcosmic.git#87ab8179e1bd9880239c340855ae8862034bd0e8"
 dependencies = [
  "bitflags 2.13.0",
  "build_helpers 0.14.0 (git+https://github.com/pop-os/libcosmic.git)",
@@ -2267,7 +2267,7 @@ dependencies = [
 [[package]]
 name = "iced_futures"
 version = "0.14.0"
-source = "git+https://github.com/pop-os/libcosmic.git#7e82198ab1aba712640b0167e58ad37bf03012ca"
+source = "git+https://github.com/pop-os/libcosmic.git#87ab8179e1bd9880239c340855ae8862034bd0e8"
 dependencies = [
  "futures",
  "iced_core 0.14.0 (git+https://github.com/pop-os/libcosmic.git)",
@@ -6620,8 +6620,8 @@ checksum = "2fb433233f2df9344722454bc7e96465c9d03bff9d77c248f9e7523fe79585b5"
 
 [[package]]
 name = "xdg-shell-wrapper-config"
-version = "0.1.0"
-source = "git+https://github.com/pop-os/cosmic-panel#15ba731b0850e5733a1f3bb51d5d48d58e6ce35b"
+version = "1.9.0"
+source = "git+https://github.com/pop-os/cosmic-panel#d6387697faf96f1a9cb04e580753089eec350249"
 dependencies = [
  "serde",
  "wayland-protocols-wlr",
