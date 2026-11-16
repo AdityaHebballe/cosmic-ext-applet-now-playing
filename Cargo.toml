@@ -15,7 +15,7 @@ imagesize = "0.13.0"
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
-rev = "5a8bd9482a35ae94c1e54edf77b331c6b970f170"
+rev = "dd108aa99d7306110eef06da43eafc109e1ab151"
 default-features = false
 features = ["applet", "wayland", "dbus-config"]
 
